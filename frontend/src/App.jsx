@@ -1,9 +1,23 @@
-const App = () => {
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { ProductsProvider } from "./context/ProductsContext";
+import Navbar from "./components/Navbar";
+import ProductsPage from "./pages/ProductsPage";
+import AddProduct from "./pages/AddProduct";
+
+function App() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <h1 className="text-4xl font-bold text-blue-600">Let’s started🚀</h1>
-    </div>
+    <ProductsProvider>
+      <Router>
+        <div className="App">
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<ProductsPage />} />
+            <Route path="/add-product" element={<AddProduct />} />
+          </Routes>
+        </div>
+      </Router>
+    </ProductsProvider>
   );
-};
+}
 
 export default App;
