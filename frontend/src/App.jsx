@@ -10,10 +10,12 @@ function App() {
       <Router>
         <div className="App">
           <Navbar />
-          <Routes>
-            <Route path="/" element={<ProductsPage />} />
-            <Route path="/add-product" element={<AddProduct />} />
-          </Routes>
+          <main>
+            <Routes>
+              <Route path="/" element={<ProductsPage />} />
+              <Route path="/add-product" element={<AddProduct />} />
+            </Routes>
+          </main>
         </div>
       </Router>
     </ProductsProvider>
