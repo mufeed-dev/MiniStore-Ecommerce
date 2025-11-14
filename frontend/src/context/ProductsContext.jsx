@@ -27,18 +27,28 @@ export const ProductsProvider = ({ children }) => {
         category = "",
         sort = "",
         page = 1,
-        limit = 6,
+        limit = 8,
       } = filters;
 
       const response = await axios.get(`${API_BASE_URL}/products`, {
-        params: { search, category, sort, page, limit },
+        params: {
+          search,
+          category: category === "all" ? "" : category,
+          sort,
+          page,
+          limit,
+        },
       });
 
       setProducts(response.data.products);
       return response.data;
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to fetch products");
+      const errorMessage =
+        err.response?.data?.error ||
+        "Failed to fetch products. Please try again.";
+      setError(errorMessage);
       console.error("Error fetching products:", err);
+      throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -55,11 +65,18 @@ export const ProductsProvider = ({ children }) => {
       setProducts((prev) => [...prev, response.data]);
       return response.data;
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to add product");
-      throw err;
+      const errorMessage =
+        err.response?.data?.error ||
+        "Failed to add product. Please check your connection and try again.";
+      setError(errorMessage);
+      throw new Error(errorMessage);
     } finally {
       setLoading(false);
     }
+  };
+
+  const clearError = () => {
+    setError(null);
   };
 
   const value = {
@@ -68,7 +85,7 @@ export const ProductsProvider = ({ children }) => {
     error,
     fetchProducts,
     addProduct,
-    setError,
+    clearError,
   };
 
   return (
