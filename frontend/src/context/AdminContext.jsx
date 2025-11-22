@@ -20,7 +20,7 @@ export const AdminProvider = ({ children }) => {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const interceptor = axios.interceptors.request.use(
+    axios.interceptors.request.use(
       (config) => {
         const token = localStorage.getItem("adminToken");
         if (token) {

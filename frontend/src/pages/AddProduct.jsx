@@ -1,94 +1,84 @@
 import { useState, useEffect } from "react";
 import { useProducts } from "../context/ProductsContext";
 import toast from "react-hot-toast";
+import { useFormik } from "formik";
+import * as Yup from "yup";
+
+const productSchema = Yup.object().shape({
+  name: Yup.string()
+    .trim()
+    .required("Product name is required")
+    .min(2, "Product name must be at least 2 characters")
+    .max(100, "Product name must be less than 100 characters"),
+  price: Yup.number()
+    .typeError("Price must be a number")
+    .required("Price is required")
+    .positive("Price must be greater than 0")
+    .min(0.01, "Price must be at least $0.01"),
+  category: Yup.string()
+    .required("Category is required")
+    .oneOf(
+      ["Electronics", "Clothing", "Books", "Home & Kitchen", "Sports", "Other"],
+      "Please select a valid category"
+    ),
+  image: Yup.string().url("Please enter a valid URL").nullable().notRequired(),
+});
 
 const AddProduct = ({ editProduct, onSuccess }) => {
   const [formLoading, setFormLoading] = useState(false);
   const { addProduct, updateProduct, error, clearError } = useProducts();
   const [selectedFile, setSelectedFile] = useState(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    price: "",
-    category: "",
-    image: "",
+
+  const formik = useFormik({
+    initialValues: {
+      name: "",
+      price: "",
+      category: "",
+      image: "",
+    },
+    validationSchema: productSchema,
+    onSubmit: async (values) => {
+      await handleSubmit(values);
+    },
   });
 
   useEffect(() => {
     if (editProduct) {
-      setFormData({
-        name: editProduct.name,
-        price: editProduct.price,
-        category: editProduct.category,
+      formik.setValues({
+        name: editProduct.name || "",
+        price: editProduct.price || "",
+        category: editProduct.category || "",
         image: editProduct.image || "",
       });
     } else {
-      setFormData({
-        name: "",
-        price: "",
-        category: "",
-        image: "",
-      });
+      formik.resetForm();
     }
     setSelectedFile(null);
     clearError();
   }, [editProduct, clearError]);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
       setSelectedFile(file);
-      setFormData((prev) => ({ ...prev, image: "" }));
+      formik.setFieldValue("image", "");
     }
   };
 
-  const validateForm = () => {
-    const errors = [];
-
-    if (!formData.name.trim()) {
-      errors.push("Please enter a product name");
-    }
-    if (!formData.price || parseFloat(formData.price) <= 0) {
-      errors.push("Please enter a valid price");
-    }
-    if (!formData.category) {
-      errors.push("Please select a category");
-    }
-
-    if (errors.length > 0) {
-      errors.forEach((err) => toast.error(err));
-      return false;
-    }
-    return true;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (values) => {
     setFormLoading(true);
     clearError();
 
     try {
-      if (!validateForm()) {
-        setFormLoading(false);
-        return;
-      }
-
       const submitData = new FormData();
-      submitData.append("name", formData.name);
-      submitData.append("price", parseFloat(formData.price));
-      submitData.append("category", formData.category);
+      submitData.append("name", values.name.trim());
+      submitData.append("price", parseFloat(values.price));
+      submitData.append("category", values.category);
 
       if (selectedFile) {
         submitData.append("image", selectedFile);
-      } else if (formData.image) {
-        submitData.append("image", formData.image);
+      } else if (values.image) {
+        submitData.append("image", values.image);
       }
 
       if (editProduct) {
@@ -123,13 +113,19 @@ const AddProduct = ({ editProduct, onSuccess }) => {
           </label>
           <input
             type="text"
+            id="name"
             name="name"
-            value={formData.name}
-            onChange={handleChange}
-            required
+            value={formik.values.name}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
             className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
             placeholder="Enter product name"
           />
+          {formik.touched.name && formik.errors.name && (
+            <div className="mt-1 text-sm text-red-600">
+              {formik.errors.name}
+            </div>
+          )}
         </div>
 
         <div>
@@ -138,15 +134,21 @@ const AddProduct = ({ editProduct, onSuccess }) => {
           </label>
           <input
             type="number"
+            id="price"
             name="price"
-            value={formData.price}
-            onChange={handleChange}
-            required
+            value={formik.values.price}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
             min="0"
             step="0.01"
             className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
             placeholder="Enter price"
           />
+          {formik.touched.price && formik.errors.price && (
+            <div className="mt-1 text-sm text-red-600">
+              {formik.errors.price}
+            </div>
+          )}
         </div>
 
         <div>
@@ -154,10 +156,11 @@ const AddProduct = ({ editProduct, onSuccess }) => {
             Category *
           </label>
           <select
+            id="category"
             name="category"
-            value={formData.category}
-            onChange={handleChange}
-            required
+            value={formik.values.category}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
             className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
           >
             <option value="">Select a category</option>
@@ -168,6 +171,11 @@ const AddProduct = ({ editProduct, onSuccess }) => {
             <option value="Sports">Sports</option>
             <option value="Other">Other</option>
           </select>
+          {formik.touched.category && formik.errors.category && (
+            <div className="mt-1 text-sm text-red-600">
+              {formik.errors.category}
+            </div>
+          )}
         </div>
 
         <div>
@@ -197,18 +205,25 @@ const AddProduct = ({ editProduct, onSuccess }) => {
           </label>
           <input
             type="url"
+            id="image"
             name="image"
-            value={formData.image}
-            onChange={handleChange}
+            value={formik.values.image}
+            onChange={formik.handleChange}
+            onBlur={formik.handleBlur}
             className="w-full px-3 sm:px-4 py-2 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
             placeholder="https://example.com/image.jpg"
             disabled={selectedFile !== null}
           />
-          {formData.image && !selectedFile && (
+          {formik.touched.image && formik.errors.image && (
+            <div className="mt-1 text-sm text-red-600">
+              {formik.errors.image}
+            </div>
+          )}
+          {formik.values.image && !selectedFile && (
             <div className="mt-2">
               <p className="text-sm text-gray-600 mb-1">Image Preview:</p>
               <img
-                src={formData.image}
+                src={formik.values.image}
                 alt="Preview"
                 className="h-24 w-24 sm:h-32 sm:w-32 object-cover rounded-lg border"
                 onError={(e) => {
@@ -230,7 +245,7 @@ const AddProduct = ({ editProduct, onSuccess }) => {
           </button>
           <button
             type="submit"
-            disabled={formLoading}
+            disabled={formLoading || !formik.isValid || formik.isSubmitting}
             className="flex-1 px-4 sm:px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center justify-center text-base"
           >
             {formLoading ? (
