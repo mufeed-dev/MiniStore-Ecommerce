@@ -30,7 +30,7 @@ const productSchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      default: "https://via.placeholder.com/300x300?text=No+Image",
+      default: "https://placehold.co/300x300?text=No+Image",
     },
   },
   {

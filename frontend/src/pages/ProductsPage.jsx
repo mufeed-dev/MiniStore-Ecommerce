@@ -1,253 +1,301 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useProducts } from "../context/ProductsContext";
 import ProductCard from "../components/ProductCard";
 import LoadingSpinner from "../components/LoadingSpinner";
+import Pagination from "../components/Pagination";
+import BannerSlider from "../components/BannerSlider";
+import Footer from "../components/Footer";
+import { useScrollToFilters } from "../hooks/useScrollToFilters";
+import { getSortDisplayText } from "../utils/sortUtils";
 
 const ProductsPage = () => {
-  const { products, loading, error, fetchProducts } = useProducts();
-  const [filters, setFilters] = useState({
-    search: "",
-    category: "all",
-    sort: "",
-    page: 1,
-  });
-  const [searchInput, setSearchInput] = useState("");
+  const { products, loading, error, pagination, fetchProducts } = useProducts();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const getInitialFilters = () => {
+    const savedFilters = sessionStorage.getItem("productsFilters");
+    const searchFromState = location.state?.search || "";
+
+    if (savedFilters) {
+      const parsed = JSON.parse(savedFilters);
+      return {
+        ...parsed,
+        search: searchFromState || parsed.search,
+      };
+    }
+
+    return {
+      search: searchFromState,
+      category: "all",
+      sort: "",
+      page: 1,
+    };
+  };
+
+  const [filters, setFilters] = useState(getInitialFilters);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const scrollToFilters = useScrollToFilters();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setFilters((prev) => ({ ...prev, search: searchInput, page: 1 }));
-    }, 500);
+    sessionStorage.setItem("productsFilters", JSON.stringify(filters));
+  }, [filters]);
 
-    return () => clearTimeout(timer);
-  }, [searchInput]);
+  useEffect(() => {
+    const searchFromState =
+      location.state && typeof location.state.search === "string"
+        ? location.state.search
+        : "";
+
+    if (searchFromState === filters.search) {
+      return;
+    }
+
+    setFilters((prev) => ({
+      ...prev,
+      search: searchFromState,
+      page: 1,
+    }));
+  }, [location.state?.search, filters.search]);
 
   useEffect(() => {
     fetchProducts(filters);
-  }, [filters]);
+  }, [filters, fetchProducts]);
 
-  const handleSearchChange = (e) => {
-    setSearchInput(e.target.value);
-  };
+  useEffect(() => {
+    if (hasUserInteracted && filters.page === 1) {
+      const timer = setTimeout(() => {
+        scrollToFilters();
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [
+    filters.category,
+    filters.sort,
+    filters.search,
+    scrollToFilters,
+    hasUserInteracted,
+  ]);
 
   const handleCategoryChange = (e) => {
+    setHasUserInteracted(true);
     setFilters((prev) => ({ ...prev, category: e.target.value, page: 1 }));
   };
 
   const handleSortChange = (e) => {
+    setHasUserInteracted(true);
     setFilters((prev) => ({ ...prev, sort: e.target.value, page: 1 }));
   };
 
+  const handlePageChange = (newPage) => {
+    setFilters((prev) => ({ ...prev, page: newPage }));
+    scrollToFilters();
+  };
+
   const clearFilters = () => {
-    setSearchInput("");
     setFilters({
       search: "",
       category: "all",
       sort: "",
       page: 1,
     });
+    setHasUserInteracted(true);
+    sessionStorage.removeItem("productsFilters");
+    navigate("/", {
+      replace: true,
+      state: {},
+    });
   };
 
-  if (loading && products.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-100">
-        <LoadingSpinner size="large" text="Loading products..." />
-      </div>
-    );
-  }
+  const handleProductClick = useCallback(
+    (product) => {
+      navigate(`/product/${product._id}`);
+    },
+    [navigate]
+  );
+
+  useEffect(() => {
+    if (location.state?.scrollToFilters) {
+      const timer = setTimeout(() => {
+        scrollToFilters();
+        navigate("/", {
+          replace: true,
+          state: {
+            ...(location.state?.search
+              ? { search: location.state.search }
+              : {}),
+          },
+        });
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [
+    location.state?.scrollToFilters,
+    scrollToFilters,
+    navigate,
+    location.state?.search,
+  ]);
+
+  const shouldShowBanner =
+    !filters.search && filters.category === "all" && !filters.sort;
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm border-b">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {shouldShowBanner && <BannerSlider />}
+
+      <div className={`flex-1 ${!shouldShowBanner ? "mt-12" : ""}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900 mb-3">
-              Discover Amazing Products
-            </h1>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Find the perfect items at unbeatable prices. Shop with confidence
-              and style.
-            </p>
-          </div>
-        </div>
-      </div>
+          <div className="bg-white rounded-xl shadow-sm border p-6 mb-8">
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                <div className="min-w-[200px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Category
+                  </label>
+                  <select
+                    value={filters.category}
+                    onChange={handleCategoryChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  >
+                    <option value="all">All Categories</option>
+                    <option value="Electronics">📱 Electronics</option>
+                    <option value="Clothing">👕 Clothing</option>
+                    <option value="Books">📚 Books</option>
+                    <option value="Home & Kitchen">🏠 Home & Kitchen</option>
+                    <option value="Sports">⚽ Sports</option>
+                    <option value="Other">📦 Other</option>
+                  </select>
+                </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
-          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-            <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
-              <div className="flex-1 min-w-[250px]">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search products by name..."
-                    value={searchInput}
-                    onChange={handleSearchChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <span className="text-gray-400">🔍</span>
+                <div className="min-w-[200px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Sort By
+                  </label>
+                  <select
+                    value={filters.sort}
+                    onChange={handleSortChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  >
+                    <option value="">Default</option>
+                    <option value="price_low">Price: Low to High</option>
+                    <option value="price_high">Price: High to Low</option>
+                    <option value="name">Name: A to Z</option>
+                  </select>
+                </div>
+              </div>
+
+              {(filters.search ||
+                filters.category !== "all" ||
+                filters.sort) && (
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap gap-2">
+                    {filters.search && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        Search: "{filters.search}"
+                      </span>
+                    )}
+                    {filters.category !== "all" && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        {filters.category}
+                      </span>
+                    )}
+                    {filters.sort && (
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                        {getSortDisplayText(filters.sort)}
+                      </span>
+                    )}
                   </div>
+                  <button
+                    onClick={clearFilters}
+                    className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium flex items-center gap-2 whitespace-nowrap border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    <span>🔄</span>
+                    Clear All
+                  </button>
                 </div>
-              </div>
+              )}
+            </div>
+          </div>
 
-              <div className="min-w-[180px]">
-                <select
-                  value={filters.category}
-                  onChange={handleCategoryChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="all">All Categories</option>
-                  <option value="Electronics">📱 Electronics</option>
-                  <option value="Clothing">👕 Clothing</option>
-                  <option value="Books">📚 Books</option>
-                  <option value="Home & Kitchen">🏠 Home & Kitchen</option>
-                  <option value="Sports">⚽ Sports</option>
-                  <option value="Other">📦 Other</option>
-                </select>
-              </div>
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center">
+              <span className="text-lg mr-2">⚠️</span>
+              {error}
+            </div>
+          )}
 
-              <div className="min-w-[200px]">
-                <select
-                  value={filters.sort}
-                  onChange={handleSortChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Sort By</option>
-                  <option value="price_low">Price: Low to High</option>
-                  <option value="price_high">Price: High to Low</option>
-                  <option value="name">Name: A to Z</option>
-                </select>
-              </div>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {filters.search
+                  ? `Search Results for "${filters.search}"`
+                  : filters.category !== "all"
+                  ? `${filters.category} Products`
+                  : "All Products"}
+              </h1>
+              <p className="text-gray-600 mt-1">
+                Showing {products.length} of {pagination.totalProducts} products
+              </p>
             </div>
 
-            {(filters.search || filters.category !== "all" || filters.sort) && (
-              <button
-                onClick={clearFilters}
-                className="px-4 py-3 text-gray-600 hover:text-gray-800 font-medium flex items-center gap-2 whitespace-nowrap"
-              >
-                <span>🔄</span>
-                Clear Filters
-              </button>
+            {pagination.totalPages > 1 && (
+              <p className="text-sm text-gray-500">
+                Page {pagination.currentPage} of {pagination.totalPages}
+              </p>
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2 mt-4">
-            {filters.search && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                Search: "{filters.search}"
+          {loading && products.length === 0 && (
+            <div>
+              <LoadingSpinner size="large" text="Loading products..." />
+            </div>
+          )}
+
+          {products.length === 0 && !loading ? (
+            <div className="text-center py-16 bg-white rounded-xl shadow-sm border">
+              <div className="text-gray-400 text-8xl mb-6">📦</div>
+              <h3 className="text-2xl font-semibold text-gray-600 mb-3">
+                No products found
+              </h3>
+              <p className="text-gray-500 mb-6 max-w-md mx-auto">
+                {filters.search || filters.category !== "all"
+                  ? "Try adjusting your search or filters to find what you're looking for."
+                  : "No products available yet. Check back later!"}
+              </p>
+              {(filters.search || filters.category !== "all") && (
                 <button
-                  onClick={() => setSearchInput("")}
-                  className="ml-1 hover:text-blue-600"
+                  onClick={clearFilters}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
                 >
-                  ×
+                  Clear All Filters
                 </button>
-              </span>
-            )}
-            {filters.category !== "all" && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Category: {filters.category}
-                <button
-                  onClick={() =>
-                    setFilters((prev) => ({ ...prev, category: "all" }))
-                  }
-                  className="ml-1 hover:text-green-600"
-                >
-                  ×
-                </button>
-              </span>
-            )}
-            {filters.sort && (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                Sort:{" "}
-                {filters.sort === "price_low"
-                  ? "Price Low to High"
-                  : filters.sort === "price_high"
-                  ? "Price High to Low"
-                  : "Name A to Z"}
-                <button
-                  onClick={() => setFilters((prev) => ({ ...prev, sort: "" }))}
-                  className="ml-1 hover:text-purple-600"
-                >
-                  ×
-                </button>
-              </span>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+                {products.map((product) => (
+                  <ProductCard
+                    key={product._id}
+                    product={product}
+                    onProductClick={() => handleProductClick(product)}
+                  />
+                ))}
+              </div>
+
+              <Pagination
+                pagination={pagination}
+                onPageChange={handlePageChange}
+              />
+            </>
+          )}
         </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center">
-            <span className="text-lg mr-2">⚠️</span>
-            {error}
-          </div>
-        )}
-
-        {products.length > 0 && (
-          <div className="flex justify-between items-center mb-6">
-            <p className="text-gray-600">
-              Showing <span className="font-semibold">{products.length}</span>{" "}
-              products
-              {filters.search && ` for "${filters.search}"`}
-              {filters.category !== "all" && ` in ${filters.category}`}
-            </p>
-          </div>
-        )}
-
-        {products.length === 0 && !loading ? (
-          <div className="text-center py-16 bg-white rounded-xl shadow-sm border">
-            <div className="text-gray-400 text-8xl mb-6">📦</div>
-            <h3 className="text-2xl font-semibold text-gray-600 mb-3">
-              No products found
-            </h3>
-            <p className="text-gray-500 mb-6 max-w-md mx-auto">
-              {filters.search || filters.category !== "all"
-                ? "Try adjusting your search or filters to find what you're looking for."
-                : "No products available yet. Be the first to add a product!"}
-            </p>
-            {(filters.search || filters.category !== "all") && (
-              <button
-                onClick={clearFilters}
-                className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
-              >
-                Clear All Filters
-              </button>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {products.map((product) => (
-                <ProductCard key={product._id} product={product} />
-              ))}
-            </div>
-
-            {loading && (
-              <div className="mt-8">
-                <LoadingSpinner text="Loading more products..." />
-              </div>
-            )}
-
-            {products.length > 0 && (
-              <div className="flex justify-center mt-12">
-                <div className="flex gap-2">
-                  <button className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold">
-                    1
-                  </button>
-                  <button className="px-6 py-3 bg-white border border-gray-300 rounded-lg font-semibold hover:bg-gray-50">
-                    2
-                  </button>
-                  <button className="px-6 py-3 bg-white border border-gray-300 rounded-lg font-semibold hover:bg-gray-50">
-                    3
-                  </button>
-                  <button className="px-6 py-3 bg-white border border-gray-300 rounded-lg font-semibold hover:bg-gray-50">
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
       </div>
+
+      <Footer />
     </div>
   );
 };
