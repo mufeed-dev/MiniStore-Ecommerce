@@ -28,6 +28,7 @@ const AddProduct = ({ editProduct, onSuccess }) => {
   const [formLoading, setFormLoading] = useState(false);
   const { addProduct, updateProduct, error, clearError } = useProducts();
   const [selectedFile, setSelectedFile] = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
 
   const formik = useFormik({
     initialValues: {
@@ -54,6 +55,7 @@ const AddProduct = ({ editProduct, onSuccess }) => {
       formik.resetForm();
     }
     setSelectedFile(null);
+    setFilePreview(null);
     clearError();
   }, [editProduct, clearError]);
 
@@ -61,9 +63,19 @@ const AddProduct = ({ editProduct, onSuccess }) => {
     const file = e.target.files[0];
     if (file) {
       setSelectedFile(file);
+      const previewUrl = URL.createObjectURL(file);
+      setFilePreview(previewUrl);
       formik.setFieldValue("image", "");
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (filePreview) {
+        URL.revokeObjectURL(filePreview);
+      }
+    };
+  }, [filePreview]);
 
   const handleSubmit = async (values) => {
     setFormLoading(true);
@@ -106,7 +118,7 @@ const AddProduct = ({ editProduct, onSuccess }) => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+      <form onSubmit={formik.handleSubmit} className="space-y-4 sm:space-y-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Product Name *
@@ -193,6 +205,15 @@ const AddProduct = ({ editProduct, onSuccess }) => {
               <p className="text-sm text-gray-600 mb-1">
                 Selected file: {selectedFile.name}
               </p>
+              <p className="text-sm text-gray-600 mb-1">Image Preview:</p>
+              <img
+                src={filePreview}
+                alt="Preview"
+                className="h-24 w-24 sm:h-32 sm:w-32 object-cover rounded-lg border"
+                onError={(e) => {
+                  e.target.style.display = "none";
+                }}
+              />
             </div>
           )}
         </div>
