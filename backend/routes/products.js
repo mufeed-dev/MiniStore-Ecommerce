@@ -1,18 +1,19 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const multer = require("multer");
-const path = require("path");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("../lib/cloudinary");
 const Product = require("../models/Product");
 const router = express.Router();
 const { authenticateToken } = require("./auth");
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "public/uploads/");
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, "product-" + uniqueSuffix + path.extname(file.originalname));
+// Cloudinary storage configuration
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "ecommerce-products",
+    allowed_formats: ["jpg", "png", "jpeg", "webp"],
+    transformation: [{ width: 500, height: 500, crop: "limit" }],
   },
 });
 
@@ -38,11 +39,28 @@ const validateProductId = (id) => {
   }
 };
 
-const handleImageUpload = (req) => {
-  if (req.file) {
-    return `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+const extractPublicIdFromUrl = (url) => {
+  try {
+    const parts = url.split("/");
+    const filename = parts[parts.length - 1];
+    const publicId = filename.split(".")[0];
+    return `ecommerce-products/${publicId}`;
+  } catch (error) {
+    return null;
   }
-  return req.body.image || "https://placehold.co/300x300?text=No+Image";
+};
+
+const deleteImageFromCloudinary = async (imageUrl) => {
+  if (!imageUrl || imageUrl.includes("placehold.co")) return;
+
+  try {
+    const publicId = extractPublicIdFromUrl(imageUrl);
+    if (publicId) {
+      await cloudinary.uploader.destroy(publicId);
+    }
+  } catch (error) {
+    console.error("Error deleting image from Cloudinary:", error.message);
+  }
 };
 
 router.get("/", async (req, res) => {
@@ -67,8 +85,8 @@ router.get("/", async (req, res) => {
     };
 
     const sortQuery = getSortQuery(sort);
-
     const skip = (page - 1) * limit;
+
     const products = await Product.find(query)
       .sort(sortQuery)
       .skip(skip)
@@ -122,7 +140,10 @@ router.post(
           .json({ error: "Name, price, and category are required" });
       }
 
-      const imageUrl = handleImageUpload(req);
+      let imageUrl = "https://placehold.co/300x300?text=No+Image";
+      if (req.file) {
+        imageUrl = req.file.path;
+      }
 
       const product = new Product({
         name: name.trim(),
@@ -149,6 +170,11 @@ router.put(
       const { id } = req.params;
       validateProductId(id);
 
+      const product = await Product.findById(id);
+      if (!product) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+
       const updateData = { ...req.body };
 
       if (updateData.name) {
@@ -157,18 +183,18 @@ router.put(
       if (updateData.price) {
         updateData.price = parseFloat(updateData.price);
       }
+      if (updateData.image) {
+        await deleteImageFromCloudinary(product.image);
+      }
       if (req.file) {
-        updateData.image = handleImageUpload(req);
+        await deleteImageFromCloudinary(product.image);
+        updateData.image = req.file.path;
       }
 
       const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
         new: true,
         runValidators: true,
       });
-
-      if (!updatedProduct) {
-        return res.status(404).json({ error: "Product not found" });
-      }
 
       res.json(updatedProduct);
     } catch (error) {
@@ -187,11 +213,12 @@ router.delete("/:id", authenticateToken, async (req, res) => {
     const { id } = req.params;
     validateProductId(id);
 
-    const deletedProduct = await Product.findByIdAndDelete(id);
-
-    if (!deletedProduct) {
+    const product = await Product.findById(id);
+    if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
+    await deleteImageFromCloudinary(product.image);
+    await Product.findByIdAndDelete(id);
 
     res.json({
       message: "Product deleted successfully",
